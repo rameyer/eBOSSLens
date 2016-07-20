@@ -119,31 +119,25 @@ def resolution(x):
 
 #Prepare the flux in the BOSS bins starting from MC template/any datapoints array
 def template_stretch(template_x, template_y, xdata, x0,A,B,eps):
-	#cut to remove boundary effect from MC simulation
-	cut = 50
-	template_x = template_x[cut:-cut]
-	template_y = template_y[cut:-cut]
-	#expand the continuum to ensure proper convolution
-	k = max(1,int(0.11*len(template_x)/B))
+	if A < 0:
+		A = -A
+		template_y = template_y[::-1]
+	k = max(1,int(0.10*len(template_x)/B))
 	step = (template_x[-1]- template_x[0])/(len(template_x)-1)
 	temp_x = n.linspace(template_x[0]-k*step, template_x[-1]+k*step,len(template_x)+2*k)
 	temp_y = temp_x*0 + 0.5*(template_y[0]+template_y[-1])
 	temp_y[k:-k] = template_y
 	template_x, template_y = temp_x, temp_y
-	del temp_x
-	del temp_y
-	#stretch the spectrum
-	template_y = template_y*A
+		
 	m = n.mean(template_x) 
-	template_x = B*(template_x -m) + m + eps
-	#convolve it with gaussian of dispersion ~ resolution
+	template_x = B*(template_x -m) + m + eps 
 	sigma = x0/resolution(x0)
 	gaussian_kernel = gauss(template_x,x_0=x0,A=1/n.sqrt(sigma*2*n.pi),var=sigma**2)
-	template_y = n.convolve(template_y, gaussian_kernel,mode='same')
-	#retrieve the template flux in the bins of the observed flux
-	nearest_y = [template_y[(n.abs(template_x - w)).argmin()] for w in xdata]
-	return  nearest_y
+	template_y = n.convolve(template_y*A, gaussian_kernel, mode = 'same')
+	interpol = interpolate.interp1d(template_x,template_y, kind ='linear')
 	
+	return interpol(xdata)
+
 def chi2template(params,xdata,ydata, template_x, template_y, x0, ivar):
 	y_fit = template_stretch(template_x, template_y, xdata, x0, params[0],params[1],params[2])
 	return n.sum(ivar*(ydata - y_fit)**2)/(len(xdata)-len(params)-1)
@@ -340,7 +334,7 @@ for j in n.arange(len(plate_mjd)):
 		if searchLyA == True and QSOlens:
 			peak_candidates = n.array([(x0,0.0,0.0,0.0,test,0.0,0.0,0.0,0.0,0.0,0.0) for x0,test in zip(wave,SN) if (test>12.0 and  5600<x0)])
 		elif searchLyA == True and QSOlens == False:
-			peak_candidates = n.array([(x0,0.0,0.0,0.0,test,0.0,0.0,0.0,0.0,0.0,0.0) for x0,test in zip(wave,SN) if (test>8.0 and  3600<x0<4800)])
+			peak_candidates = n.array([(x0,0.0,0.0,0.0,test,0.0,0.0,0.0,0.0,0.0,0.0) for x0,test in zip(wave,SN) if (test>12.0 and  3600<x0<4800)])
 		elif searchLyA == False and QSOlens == False:
 			peak_candidates = n.array([(x0,0.0,0.0,0.0,test,0.0,0.0,0.0,0.0,0.0,0.0) for x0,test in zip(wave,SN) if test>6.0])
 		else:
@@ -367,7 +361,7 @@ for j in n.arange(len(plate_mjd)):
 			if nearline(x0, zline, fiberid[i], z[i], int(mjd), int(plate)):
 				continue
  			
- 			bounds = n.linspace(wave2bin(x0,c0,c1,Nmax)-20,wave2bin(x0,c0,c1,Nmax)+20,41,dtype = n.int16)
+ 			bounds = n.linspace(wave2bin(x0,c0,c1,Nmax)-10,wave2bin(x0,c0,c1,Nmax)+10,21,dtype = n.int16)
 
 			#Single Line: Gaussian fit around x_0
 			if searchLyA == True:
@@ -445,14 +439,21 @@ for j in n.arange(len(plate_mjd)):
 				
 				time = datetime.datetime.now()
 				
-				template_keys = n.array(['./LAE_TEMPLATE/spec_V0_2N17_B40_D0_E150_F500.dat','./LAE_TEMPLATE/spec_V0_2N18_B40_D0_E150_F500.dat',
-										'./LAE_TEMPLATE/spec_V0_2N19_B40_D0_E150_F500.dat','./LAE_TEMPLATE/spec_V0_2N17_B40_D0_E100_F150.dat', 
-										'./LAE_TEMPLATE/spec_V0_2N18_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V0_2N19_B40_D0_E100_F150.dat', 
-										'./LAE_TEMPLATE/spec_V0_2N20_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V0_2N21_B40_D0_E100_F150.dat', 
-										'./LAE_TEMPLATE/spec_V150_2N17_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V150_2N18_B40_D0_E100_F150.dat',
-										'./LAE_TEMPLATE/spec_V150_2N19_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V150_2N20_B40_D0_E100_F150.dat', 
-										'./LAE_TEMPLATE/spec_V150_2N21_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V300_2N19_B40_D0_E100_F150.dat',
-										'./LAE_TEMPLATE/spec_V300_2N20_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V300_7N20_B40_D0_E100_F150.dat'])
+				#template_keys = n.array(['./LAE_TEMPLATE/spec_V0_2N17_B40_D0_E150_F500.dat','./LAE_TEMPLATE/spec_V0_2N18_B40_D0_E150_F500.dat',
+										#'./LAE_TEMPLATE/spec_V0_2N19_B40_D0_E150_F500.dat','./LAE_TEMPLATE/spec_V0_2N17_B40_D0_E100_F150.dat', 
+										#'./LAE_TEMPLATE/spec_V0_2N18_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V0_2N19_B40_D0_E100_F150.dat', 
+										#'./LAE_TEMPLATE/spec_V0_2N20_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V0_2N21_B40_D0_E100_F150.dat', 
+										#'./LAE_TEMPLATE/spec_V150_2N17_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V150_2N18_B40_D0_E100_F150.dat',
+										#'./LAE_TEMPLATE/spec_V150_2N19_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V150_2N20_B40_D0_E100_F150.dat', 
+										#'./LAE_TEMPLATE/spec_V150_2N21_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V300_2N19_B40_D0_E100_F150.dat',
+										#'./LAE_TEMPLATE/spec_V300_2N20_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V300_7N20_B40_D0_E100_F150.dat'])
+				template_keys = n.array(['./LAE_TEMPLATE/spec_V0_2N20_B40_D0_E150_F500.dat','./LAE_TEMPLATE/spec_V300_2N19_B40_D0_E100_F150.dat',
+								'./LAE_TEMPLATE/spec_V150_2N21_B40_D0_E100_F150.dat','./spec_V50_2N18_B40_D0_E150_F500', './spec_V50_2N18_B40_D0_E100_F150',
+								'./spec_V50_2N20_B40_D0_E150_F500', './spec_V50_2N20_B40_D0_E100_F150'])
+		
+				
+				
+				
 				best_template_key = ''
 				best_template_chisq = 100000000
 				best_template_params = [1,1,0]
@@ -469,9 +470,9 @@ for j in n.arange(len(plate_mjd)):
 					template_y = 5*template_y/n.max(template_y)
 					
 					
-					
-					res =  minimize(chi2template,init,args=(wave[bounds], reduced_flux[i,bounds], template_x, template_y, x0, ivar[i,bounds]), method='SLSQP', bounds = [(0.01,100),(0.01,100),(-5,+5)])
-					
+					time1 =datetime.datetime.now()
+					res =  minimize(chi2template,init,args=(wave[bounds], reduced_flux[i,bounds], template_x, template_y, x0, ivar[i,bounds]), method='SLSQP', bounds = [(-2,2),(0.001,100),(-4,+4)])
+					print datetime.datetime.now() - time1
 					params = res.x
 					chisq_template = res.fun
 					
@@ -480,7 +481,10 @@ for j in n.arange(len(plate_mjd)):
 						best_template_key = key
 						best_template_params = params
 						best_template = template_stretch(template_x, template_y, wave[bounds],x0,params[0],params[1],params[2])	
+				
 				print datetime.datetime.now() - time
+				print best_template_params
+				print best_template_key
 				ax = plt.subplot(1,1,1)
 				plt.title('RA='+str(RA[i])+', Dec='+str(DEC[i])+', Plate='+str(plate)+', Fiber='+str(fiberid[i])+', MJD='+str(mjd)+'\n$z='+str(z[i])+' \pm'+str(z_err[i])+'$, Class='+str(obj_class[i]))
 				ax.plot(wave, reduced_flux[i,:],'k')
