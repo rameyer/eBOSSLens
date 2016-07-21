@@ -7,7 +7,7 @@
 import numpy as n
 import pyfits as pf
 import matplotlib as mpl
-#mpl.use('Agg')
+mpl.use('Agg')
 from matplotlib import pyplot as plt
 import math
 from scipy.optimize import leastsq
@@ -122,7 +122,7 @@ def template_stretch(template_x, template_y, xdata, x0,A,B,eps):
 	if A < 0:
 		A = -A
 		template_y = template_y[::-1]
-	k = max(1,int(0.10*len(template_x)/B))
+	k = max(1,int(len(template_x)/B))
 	step = (template_x[-1]- template_x[0])/(len(template_x)-1)
 	temp_x = n.linspace(template_x[0]-k*step, template_x[-1]+k*step,len(template_x)+2*k)
 	temp_y = temp_x*0 + 0.5*(template_y[0]+template_y[-1])
@@ -132,7 +132,7 @@ def template_stretch(template_x, template_y, xdata, x0,A,B,eps):
 	m = n.mean(template_x) 
 	template_x = B*(template_x -m) + m + eps 
 	sigma = x0/resolution(x0)
-	gaussian_kernel = gauss(template_x,x_0=x0,A=1/n.sqrt(sigma*2*n.pi),var=sigma**2)
+	gaussian_kernel = gauss(template_x,x_0=x0+eps,A=1/n.sqrt(sigma*2*n.pi),var=sigma**2)
 	template_y = n.convolve(template_y*A, gaussian_kernel, mode = 'same')
 	interpol = interpolate.interp1d(template_x,template_y, kind ='linear')
 	
@@ -255,9 +255,10 @@ for j in n.arange(len(plate_mjd)):
 
 	startTime = datetime.datetime.now()
 
-	# Loop over objects
+	# Loop over fibers
 	for i in  n.arange(len(flux[:,0])):
-	#for i in n.array([788,820,702,721,148,346,638,651,754,340,377,609,696,884,377,614,940,59,253,540]):
+	#Shu candidates
+	#for i in n.array([810,34,702,721,148,40,638,754,340,696,854,614,540,302,473,180,966,314,800,644,546]):
 		if QSOlens:
 			# Take only QSOs
 			if (not(obj_class[i] == 'QSO   ') or obj_type[i] =='SKY             ' or 'SPECTROPHOTO_STD'==obj_type[i]): 
@@ -334,7 +335,7 @@ for j in n.arange(len(plate_mjd)):
 		if searchLyA == True and QSOlens:
 			peak_candidates = n.array([(x0,0.0,0.0,0.0,test,0.0,0.0,0.0,0.0,0.0,0.0) for x0,test in zip(wave,SN) if (test>12.0 and  5600<x0)])
 		elif searchLyA == True and QSOlens == False:
-			peak_candidates = n.array([(x0,0.0,0.0,0.0,test,0.0,0.0,0.0,0.0,0.0,0.0) for x0,test in zip(wave,SN) if (test>12.0 and  3600<x0<4800)])
+			peak_candidates = n.array([(x0,0.0,0.0,0.0,test,0.0,0.0,0.0,0.0,0.0,0.0) for x0,test in zip(wave,SN) if (test>8.0 and  3600<x0<4800)])
 		elif searchLyA == False and QSOlens == False:
 			peak_candidates = n.array([(x0,0.0,0.0,0.0,test,0.0,0.0,0.0,0.0,0.0,0.0) for x0,test in zip(wave,SN) if test>6.0])
 		else:
@@ -430,14 +431,45 @@ for j in n.arange(len(plate_mjd)):
 				elif chisq_skew_a < chisq_skew_b: #and chisq_skew_a < chisq_skew_c:
 					params_skew = params_skew_a
 					chisq_skew = chisq_skew_a
+					
+				#compute skewness indicator
+				I = n.sum(reduced_flux[i,bounds])
+				xmean = n.sum(reduced_flux[i,bounds]*wave[bounds])/I
+				sigma = n.sqrt(n.sum(reduced_flux[i,bounds]*(wave[bounds] - xmean)**2)/I)	
+				S = n.sum(reduced_flux[i,bounds]*(wave[bounds] - xmean)**3)/(I*sigma**3)
+				
+				local_wave = wave[bounds]
+				local_flux = reduced_flux[i,bounds]
+				
+				peak_index = local_flux.argmax()
+				F = 0.1*local_flux[peak_index]
+				#Find blue and right 10% peak flux
+				f = 10*F
+				k = peak_index
+				while f > F and 0<k:
+					k = k-1
+					f = local_flux[k]
+				a = (local_flux[k+1]-local_flux[k])/(local_wave[k+1]-local_wave[k]) 
+				b = local_flux[k] - a*local_wave[k]
+				l_blue_10 = (F-b)/a
+				k = peak_index
+				f = 10*F
+				while f > F and k<len(local_flux):
+					k = k+1
+					f = local_flux[k]
+				a = (local_flux[k]-local_flux[k-1])/(local_wave[k]-local_wave[k-1]) 
+				b = local_flux[k-1] - a*local_wave[k-1]
+				l_red_10 = (F-b)/a
+				Sw = S*(l_red_10-l_blue_10)
+				#print local_wave[peak_index], l_red_10, l_blue_10
+				#print S, Sw
+				
 				#elif chisq_skew_c < chisq_skew_a and chisq_skew_c < chisq_skew_b:
 				#	params_skew = params_skew_c
 				#	chisq_skew = chisq_skew_c
 				#	LyAdoublet = True
 				
 				# Testing A.Verhamme MCMC LAE profiles
-				
-				time = datetime.datetime.now()
 				
 				#template_keys = n.array(['./LAE_TEMPLATE/spec_V0_2N17_B40_D0_E150_F500.dat','./LAE_TEMPLATE/spec_V0_2N18_B40_D0_E150_F500.dat',
 										#'./LAE_TEMPLATE/spec_V0_2N19_B40_D0_E150_F500.dat','./LAE_TEMPLATE/spec_V0_2N17_B40_D0_E100_F150.dat', 
@@ -447,61 +479,54 @@ for j in n.arange(len(plate_mjd)):
 										#'./LAE_TEMPLATE/spec_V150_2N19_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V150_2N20_B40_D0_E100_F150.dat', 
 										#'./LAE_TEMPLATE/spec_V150_2N21_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V300_2N19_B40_D0_E100_F150.dat',
 										#'./LAE_TEMPLATE/spec_V300_2N20_B40_D0_E100_F150.dat','./LAE_TEMPLATE/spec_V300_7N20_B40_D0_E100_F150.dat'])
-				template_keys = n.array(['./LAE_TEMPLATE/spec_V0_2N20_B40_D0_E150_F500.dat','./LAE_TEMPLATE/spec_V300_2N19_B40_D0_E100_F150.dat',
-								'./LAE_TEMPLATE/spec_V150_2N21_B40_D0_E100_F150.dat','./spec_V50_2N18_B40_D0_E150_F500', './spec_V50_2N18_B40_D0_E100_F150',
-								'./spec_V50_2N20_B40_D0_E150_F500', './spec_V50_2N20_B40_D0_E100_F150'])
+				template_keys = n.array(['./LAE_TEMPLATE/spec_V50_2N17_B40_D0_E150_F500.dat', './LAE_TEMPLATE/spec_V50_2N17_B40_D0_E100_F150.dat',
+								'./LAE_TEMPLATE/spec_V50_2N18_B40_D0_E150_F500.dat', './LAE_TEMPLATE/spec_V50_2N18_B40_D0_E100_F150.dat',
+								'./LAE_TEMPLATE/spec_V50_2N19_B40_D0_E150_F500.dat', './LAE_TEMPLATE/spec_V50_2N19_B40_D0_E100_F150.dat',
+								'./LAE_TEMPLATE/spec_V50_2N20_B40_D0_E150_F500.dat', './LAE_TEMPLATE/spec_V50_2N20_B40_D0_E100_F150.dat',
+								'./LAE_TEMPLATE/spec_V50_2N21_B40_D0_E150_F500.dat', './LAE_TEMPLATE/spec_V50_2N21_B40_D0_E100_F150.dat',])
 		
-				
-				
-				
-				best_template_key = ''
-				best_template_chisq = 100000000
-				best_template_params = [1,1,0]
-				best_template = []
-				init = [1,1,0]
-				z_LAE = x0/l_LyA-1
-				time =datetime.datetime.now()
-				for key in template_keys:
-					data = n.loadtxt('.'+ key)
-					template_x = data[:,0]
-					template_y = data[:,1]
-					#redshift
-					template_x = (1+z_LAE)*l_LyA*(template_x/c +1 )
-					template_y = 5*template_y/n.max(template_y)
+				#best_template_key = ''
+				#best_template_chisq = 100000000
+				#best_template_params = [1,1,0]
+				#best_template = []
+				#init = [1,1,0]
+				#z_LAE = x0/l_LyA-1
+				#time =datetime.datetime.now()
+				#for key in template_keys:
+					#data = n.loadtxt('.'+ key)
+					#template_x = data[:,0]
+					#template_y = data[:,1]
+					##redshift
+					#template_x = (1+z_LAE)*l_LyA*(template_x/c +1 )
+					#template_y = 5*template_y/n.max(template_y)
 					
-					
-					time1 =datetime.datetime.now()
-					res =  minimize(chi2template,init,args=(wave[bounds], reduced_flux[i,bounds], template_x, template_y, x0, ivar[i,bounds]), method='SLSQP', bounds = [(-2,2),(0.001,100),(-4,+4)])
-					print datetime.datetime.now() - time1
-					params = res.x
-					chisq_template = res.fun
-					
-					if chisq_template < best_template_chisq:
-						best_template_chisq = chisq_template
-						best_template_key = key
-						best_template_params = params
-						best_template = template_stretch(template_x, template_y, wave[bounds],x0,params[0],params[1],params[2])	
-				
-				print datetime.datetime.now() - time
-				print best_template_params
-				print best_template_key
-				ax = plt.subplot(1,1,1)
-				plt.title('RA='+str(RA[i])+', Dec='+str(DEC[i])+', Plate='+str(plate)+', Fiber='+str(fiberid[i])+', MJD='+str(mjd)+'\n$z='+str(z[i])+' \pm'+str(z_err[i])+'$, Class='+str(obj_class[i]))
-				ax.plot(wave, reduced_flux[i,:],'k')
-				plt.xlabel('$Wavelength\, (Angstroms)$')
-				plt.ylabel('$f_{\lambda}\, (10^{-17} erg\, s^{-1} cm^{-2} Ang^{-1}$)')
-				ax.plot(wave,gauss(x=wave, x_0=params2[3], A=params2[0], var=params2[1]) + gauss(x=wave, x_0=params2[4], A=params2[2], var=params2[1]),'g', label = 'Doublet:'+ r'$\chi_D^2 = $' + '{:.4}'.format(chisq2))
-				#ax.plot(wave,gauss(x=wave, x_0=params[0], A=params[1], var=params[2]),'r', label = r'$\chi_G^2 = $' + '{:.4}'.format(chisq) )
-				ax.plot(wave,skew(x=wave,A = params_skew[0], w=params_skew[1], a=params_skew[2], eps=params_skew[3]), 'b', label ='Skew: ' +r'$\chi_S^2 = $' + '{:.4}'.format(chisq_skew))
-				if best_template_chisq < 100000000:
-					ax.plot(wave[bounds],best_template,'r',  label ='Template: ' + r'$\chi_S^2 = $' + '{:.4}'.format(best_template_chisq))
-				ax.legend()			
-				ax.set_xlim(3600,6000)	
-				plt.show()
-				
+					#res =  minimize(chi2template,init,args=(wave[bounds], reduced_flux[i,bounds], template_x, template_y, x0, ivar[i,bounds]), method='SLSQP', bounds = [(-10,10),(0.05,5),(-4,+4)])
+					#params = res.x
+					#chisq_template = chi2template(params,wave[bounds], reduced_flux[i,bounds], template_x, template_y,x0, ivar[i,bounds])
 
+					#if chisq_template < best_template_chisq:
+						#best_template_chisq = chisq_template
+						#best_template_key = key
+						#best_template_params = params
+						#best_template = template_stretch(template_x, template_y, wave[bounds],x0,params[0],params[1],params[2])	
 				
-		
+				#print datetime.datetime.now() - time
+				#print best_template_params
+				#print best_template_key
+				#ax = plt.subplot(1,1,1)
+				#plt.title('RA='+str(RA[i])+', Dec='+str(DEC[i])+', Plate='+str(plate)+', Fiber='+str(fiberid[i])+', MJD='+str(mjd)+'\n$z='+str(z[i])+' \pm'+str(z_err[i])+'$, Class='+str(obj_class[i]))
+				#ax.plot(wave, reduced_flux[i,:],'k')
+				#plt.xlabel('$Wavelength\, (Angstroms)$')
+				#plt.ylabel('$f_{\lambda}\, (10^{-17} erg\, s^{-1} cm^{-2} Ang^{-1}$)')
+				#ax.plot(wave,gauss(x=wave, x_0=params2[3], A=params2[0], var=params2[1]) + gauss(x=wave, x_0=params2[4], A=params2[2], var=params2[1]),'g', label = 'Doublet:'+ r'$\chi_D^2 = $' + '{:.4}'.format(chisq2))
+				##ax.plot(wave,gauss(x=wave, x_0=params[0], A=params[1], var=params[2]),'r', label = r'$\chi_G^2 = $' + '{:.4}'.format(chisq) )
+				#ax.plot(wave,skew(x=wave,A = params_skew[0], w=params_skew[1], a=params_skew[2], eps=params_skew[3]), 'b', label ='Skew: ' +r'$\chi_S^2 = $' + '{:.4}'.format(chisq_skew))
+				##if best_template_chisq < 100000000:
+				##	ax.plot(wave[bounds],best_template,'r',  label ='Template: ' + r'$\chi_S^2 = $' + '{:.4}'.format(best_template_chisq))
+				#ax.legend()			
+				#ax.set_xlim(3600,6000)	
+				#plt.show()
+				
 		counter2 = counter2 + 1;					
 		#Finding peak with lowest chi square for doublet and see if it is better fitted by single line or not
 		doublet_index = 0
@@ -615,7 +640,7 @@ for j in n.arange(len(plate_mjd)):
 				SNlines = n.sqrt(SNlines)
 				
 				if SNlines < 5:
-					fileLyA.write('\n' + str([peak[0],peak[4],z[i], SNlines ,RA[i], DEC[i], int(plate), int(mjd), fiberid[i], chisq, chisq2, chisq_skew]))
+					fileLyA.write('\n' + str([peak[0],peak[4],z[i], SNlines ,RA[i], DEC[i], int(plate), int(mjd), fiberid[i], chisq, chisq2, chisq_skew, S, Sw]))
 					detection = True
 			fileLyA.close()
 
